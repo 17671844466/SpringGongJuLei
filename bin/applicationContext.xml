@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:aop="http://www.springframework.org/schema/aop"
+	xmlns:context="http://www.springframework.org/schema/context" xmlns:tx="http://www.springframework.org/schema/tx"
+	xsi:schemaLocation="
+		http://www.springframework.org/schema/beans 
+		http://www.springframework.org/schema/beans/spring-beans.xsd
+		http://www.springframework.org/schema/context 
+		http://www.springframework.org/schema/context/spring-context-4.3.xsd
+		http://www.springframework.org/schema/aop 
+		http://www.springframework.org/schema/aop/spring-aop-4.3.xsd
+		http://www.springframework.org/schema/tx 
+		http://www.springframework.org/schema/tx/spring-tx-4.3.xsd">
+
+	<!-- 开启包的扫描 -->
+	<context:component-scan base-package="com.zhidi"></context:component-scan>
+	<!-- 读取外部文件 -->
+	<context:property-placeholder location="jdbc.properties" />
+	<!-- 数据连接池 -->
+	<bean id="dataSource" class="com.mchange.v2.c3p0.ComboPooledDataSource">
+		<!-- 指定连接数据库的属性 -->
+		<property name="driverClass" value="${jdbc.driver}"></property>
+		<property name="jdbcUrl" value="${jdbc.url}"></property>
+		<property name="user" value="${jdbc.username}"></property>
+		<property name="password" value="${jdbc.password}"></property>
+
+
+		<property name="initialPoolSize" value="3"></property>
+		<property name="minPoolSize" value="3"></property>
+		<property name="maxPoolSize" value="15"></property>
+		<property name="maxConnectionAge" value="28800"></property>
+		<property name="maxIdleTime" value="21600"></property>
+	</bean>
+	<!-- SessionFactory配置 -->
+	<bean id="sessionFactory" class="org.springframework.orm.hibernate4.LocalSessionFactoryBean">
+		<!-- 注入数据源 -->
+		<property name="dataSource" ref="dataSource"></property>
+		<!-- hibernate属性设置 -->
+		<property name="hibernateProperties">
+			<props>
+				<!-- 设置为thread:默认不会开启事务,需要手动管理 需要由Spring来管理Session上下文,需要指定 -->
+				<!-- 方言 -->
+				<prop key="hibernate.dialect">${dialect}</prop>
+				<!-- Session上下文 -->
+				<prop key="hibernate.current_session_context_class">org.springframework.orm.hibernate4.SpringSessionContext
+				</prop>
+				<prop key="hibernate.show_sql">${show_sql}</prop>
+				<prop key="hibernate.format_sql">${format_sql}</prop>
+			</props>
+		</property>
+		<!-- 扫描实体所在包 -->
+		<property name="packagesToScan" value="com.zhidi.entity"></property>
+
+	</bean>
+	<!--需要spring管理事务,所以需要指定事务管理器,hibernate的事务管理器是hiberTransactionmanager -->
+	<bean id="transactionManager" class="org.springframework.orm.hibernate4.HibernateTransactionManager">
+		<!-- 将SessionFactory注入到事务管理器中 -->
+		<property name="sessionFactory" ref="sessionFactory"></property>
+	</bean>
+	<!-- 虽然指定了事务管理器,但是Spring并不会动管理事务,所以需要手动配置事务(Spring的AOP技术和线程绑定) -->
+	<!-- 配置线程通知 -->
+	<tx:advice id="txAdvice" transaction-manager="transactionManager">
+		<tx:attributes>
+			<!-- 代表需要被事务管理的方法名 -->
+			<!-- 对于数据库更新操作,应该把事务传播行为设置为required -->
+			<tx:method name="add*" propagation="REQUIRED" />
+			<tx:method name="save*" propagation="REQUIRED" />
+			<tx:method name="insert*" propagation="REQUIRED" />
+			<tx:method name="persist*" propagation="REQUIRED" />
+
+			<!-- 对于只读操作,把事务传播行为设置为suppors -->
+			<tx:method name="get*" propagation="SUPPORTS" read-only="true" />
+			<tx:method name="count*" propagation="SUPPORTS" read-only="true" />
+			<tx:method name="find*" propagation="SUPPORTS" read-only="true" />
+			<tx:method name="list*" propagation="SUPPORTS" read-only="true" />
+			<tx:method name="*" propagation="SUPPORTS" read-only="true" />
+		</tx:attributes>
+	</tx:advice>
+	<!-- 使用Spring的AOP技术实现将事务通知织入到指定的切入点 -->
+	<aop:config>
+		<!-- 使用单切面通知,底层是使用环绕通知实现的 -->
+		<!-- 在实际开发中进行事务管理的一般是管理Service层 -->
+		<aop:advisor advice-ref="txAdvice"
+			pointcut="execution (* com.zhidi.service.impl..*.*(..))" />
+	</aop:config>
+</beans>
